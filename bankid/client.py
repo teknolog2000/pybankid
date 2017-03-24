@@ -18,15 +18,15 @@ from __future__ import absolute_import
 import os
 import warnings
 import six
+import json
 import base64
-import datetime
+
 
 import requests
-from suds.client import Client
-from suds.transport.http import HttpAuthenticated
-from suds.transport import Reply
-from suds import WebFault
-from suds.sax.text import Text
+
+from zeep import Client
+from zeep.transports import Transport
+from zeep.exceptions import Error
 from pkg_resources import resource_filename
 
 from bankid.exceptions import get_error_class, BankIDWarning
@@ -62,9 +62,13 @@ class BankIDClient(object):
             "Content-Type": "text/xml;charset=UTF-8",
             "SOAPAction": ""
         }
-        t = RequestsTransport(cert=self.certs, verify_cert=self.verify_cert)
-        self.client = Client(self.wsdl_url, location=self.api_url,
-                             headers=headers, transport=t)
+
+        session = requests.Session()
+        session.verify = self.verify_cert
+        session.cert = self.certs
+        session.headers = headers
+        transport = Transport(session=session)
+        self.client = Client(self.wsdl_url, transport=transport)
 
     def authenticate(self, personal_number, **kwargs):
         """Request an authentication order. The :py:meth:`collect` method
@@ -84,7 +88,7 @@ class BankIDClient(object):
         try:
             out = self.client.service.Authenticate(
                 personalNumber=personal_number, **kwargs)
-        except WebFault as e:
+        except Error as e:
             raise get_error_class(e, "Could not complete Authenticate order.")
 
         return self._dictify(out)
@@ -110,7 +114,7 @@ class BankIDClient(object):
             out = self.client.service.Sign(
                 userVisibleData=six.text_type(base64.b64encode(six.b(user_visible_data)), encoding='utf-8'),
                 personalNumber=personal_number, **kwargs)
-        except WebFault as e:
+        except Error as e:
             raise get_error_class(e, "Could not complete Sign order.")
 
         return self._dictify(out)
@@ -129,7 +133,7 @@ class BankIDClient(object):
         """
         try:
             out = self.client.service.Collect(orderRef=order_ref)
-        except WebFault as e:
+        except Error as e:
             raise get_error_class(e, "Could not complete Collect call.")
 
         return self._dictify(out)
@@ -159,61 +163,7 @@ class BankIDClient(object):
         :rtype: dict
 
         """
-        doc = dict(doc)
-        out = {}
         try:
-            for k in doc:
-                k = _to_unicode(k)
-                if isinstance(doc[k], Text):
-                    out[k] = _to_unicode(doc[k])
-                elif isinstance(doc[k], datetime.datetime):
-                    out[k] = doc[k]
-                else:
-                    out[k] = self._dictify(doc[k])
+            return json.loads(str(doc))
         except:
-            out = doc
-
-        return out
-
-
-def _to_unicode(s):
-    if isinstance(s, Text):
-        return six.text_type(s.unescape())
-    elif isinstance(s, six.text_type):
-        return s
-    elif isinstance(s, six.binary_type):
-        return s.decode('utf-8')
-
-
-class RequestsTransport(HttpAuthenticated):
-    """A Requests-based transport for suds, enabling the use of https and
-    certificates when communicating with the SOAP service.
-
-    Code has been adapted from this `Stack Overflow post
-    <http://stackoverflow.com/questions/6277027/suds-over-https-with-cert>`_.
-
-    """
-    def __init__(self, **kwargs):
-        self.requests_session = requests.Session()
-        self.requests_session.cert = kwargs.pop('cert', None)
-        self.requests_session.verify = kwargs.pop('verify_cert', None)
-        # `super` won't work because HttpAuthenticated does not use new style class.
-        HttpAuthenticated.__init__(self, **kwargs)
-
-    def open(self, request):
-        """Fetches the WSDL specification using certificates."""
-        self.addcredentials(request)
-        resp = self.requests_session.get(request.url,
-                                         data=request.message,
-                                         headers=request.headers)
-        result = six.BytesIO(resp.content)
-        return result
-
-    def send(self, request):
-        """Posts to SOAP service using certificates."""
-        self.addcredentials(request)
-        resp = self.requests_session.post(request.url,
-                                          data=request.message,
-                                          headers=request.headers)
-        result = Reply(resp.status_code, resp.headers, resp.content)
-        return result
+            return {k: doc[k] for k in doc}
