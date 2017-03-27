@@ -18,12 +18,9 @@ from __future__ import absolute_import
 import os
 import warnings
 import six
-import json
 import base64
 
-
 import requests
-
 from zeep import Client
 from zeep.transports import Transport
 from zeep.exceptions import Error
@@ -60,7 +57,6 @@ class BankIDClient(object):
 
         headers = {
             "Content-Type": "text/xml;charset=UTF-8",
-            "SOAPAction": ""
         }
 
         session = requests.Session()
@@ -132,7 +128,7 @@ class BankIDClient(object):
 
         """
         try:
-            out = self.client.service.Collect(orderRef=order_ref)
+            out = self.client.service.Collect(order_ref)
         except Error as e:
             raise get_error_class(e, "Could not complete Collect call.")
 
@@ -153,17 +149,13 @@ class BankIDClient(object):
             "FileSign is deprecated and therefore not implemented.")
 
     def _dictify(self, doc):
-        """Transforms the replies from :py:mod:`suds` own types to a
-        regular Python dict with strings and datetimes.
+        """Transforms the replies to a regular Python dict with strings and datetimes.
 
         Tested with BankID version 2.5 return data.
 
-        :param doc: The response as interpreted by :py:mod:`suds`.
+        :param doc: The response as interpreted by :py:mod:`zeep`.
         :returns: The response parsed to a dict.
         :rtype: dict
 
         """
-        try:
-            return json.loads(str(doc))
-        except:
-            return {k: doc[k] for k in doc}
+        return {k: (self._dictify(doc[k]) if hasattr(doc[k], '_xsd_type') else doc[k]) for k in doc}
