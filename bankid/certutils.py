@@ -15,7 +15,7 @@ from bankid.certs import get_test_cert_p12
 from bankid.exceptions import BankIDError
 
 _TEST_CERT_PASSWORD = "qwerty123"
-_TEST_CERT_URL = "https://www.bankid.com/assets/bankid/rp/FPTestcert4_20220818.p12"
+_TEST_CERT_URL = "https://www.bankid.com/assets/bankid/rp/FPTestcert4_20230629.p12"
 
 
 def create_bankid_test_server_cert_and_key(destination_path):
